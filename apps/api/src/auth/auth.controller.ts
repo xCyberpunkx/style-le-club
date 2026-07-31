@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Req, Res, UnauthorizedException, UsePipes } from '@nestjs/common'
+import { Controller, Post, Body, Req, Res, UnauthorizedException } from '@nestjs/common'
 import { Throttle } from '@nestjs/throttler'
 import type { Request, Response } from 'express'
 import { AuthService } from './auth.service'
@@ -50,9 +50,8 @@ export class AuthController {
   @Public()
   @Throttle({ default: { limit: 5, ttl: 60_000 } }) // blunt brute-force attempts specifically here
   @Post('login')
-  @UsePipes(new ZodValidationPipe(loginSchema))
   async login(
-    @Body() body: LoginInput,
+    @Body(new ZodValidationPipe(loginSchema)) body: LoginInput,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
