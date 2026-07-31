@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: slc-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: slc
+      POSTGRES_PASSWORD: slc_dev_only
+      POSTGRES_DB: style_le_club
+    ports:
+      - "5432:5432"
+    volumes:
+      - slc_postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U slc -d style_le_club"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: slc-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - slc_redis_dev_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  slc_postgres_dev_data:
+  slc_redis_dev_data:

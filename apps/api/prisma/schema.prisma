@@ -1,0 +1,196 @@
+// ============================================================
+// Style Le Club — Phase 1 Schema
+// Foundation: Organization (tenant), Auth, Employees, Roles, Permissions
+// Built for Style Le Club today, structured so multi-tenant SaaS is an
+// additive change later — every business entity carries an organizationId
+// from day one. Permission is the one deliberately GLOBAL table (a fixed
+// system catalog of capability strings); Role is tenant-scoped so each
+// organization can compose its own roles from that shared catalog.
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Connection URL lives in prisma.config.ts (Prisma 7 requirement) and,
+  // at runtime, in the @prisma/adapter-pg instance — never here.
+}
+
+// ------------------------------------------------------------
+// ORGANIZATION — the tenant. Style Le Club is the first (and for now,
+// only) row here. Every tenant-owned table below carries organizationId.
+// ------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique // reserved for future subdomain-based tenant routing
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  employees Employee[]
+  roles     Role[]
+  auditLogs AuditLog[]
+
+  @@map("organizations")
+}
+
+// ------------------------------------------------------------
+// USER — an authenticatable login account. Deliberately separate from
+// Employee: not every staff member needs system access (e.g. a cleaner),
+// but every login-having person needs an Employee-equivalent profile.
+// Revisit if this separation proves more friction than value in practice.
+// ------------------------------------------------------------
+
+model User {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  email        String  @unique
+  passwordHash String
+  isActive     Boolean @default(true)
+
+  employee      Employee?
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+// ------------------------------------------------------------
+// EMPLOYEE — staff profile. Optionally linked to a User (login access).
+// ------------------------------------------------------------
+
+model Employee {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+
+  fullName  String
+  phone     String?
+  jobTitle  String?
+  hireDate  DateTime?
+
+  roleId String?
+  role   Role?   @relation(fields: [roleId], references: [id])
+
+  active    Boolean   @default(true)
+  deletedAt DateTime? // soft delete — staff history must survive departure
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([roleId])
+  @@map("employees")
+}
+
+// ------------------------------------------------------------
+// ROLE — tenant-scoped. Each organization composes its own roles from the
+// shared Permission catalog below (e.g. "give this receptionist POS access
+// but not refunds" becomes a data change, not a redeploy).
+// ------------------------------------------------------------
+
+model Role {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  name            String
+  isSystemDefault Boolean @default(false) // e.g. an auto-created "Admin" role per org
+
+  employees   Employee[]
+  permissions RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("roles")
+}
+
+// ------------------------------------------------------------
+// PERMISSION — deliberately GLOBAL, not tenant-scoped. A fixed system
+// catalog of capability strings (e.g. "members.create", "pos.refund").
+// Seeded once via migration/seed script, not created ad-hoc per tenant.
+// ------------------------------------------------------------
+
+model Permission {
+  key         String @id // e.g. "members.create", "pos.refund"
+  description String
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId         String
+  role           Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionKey  String
+  permission     Permission @relation(fields: [permissionKey], references: [key], onDelete: Cascade)
+
+  @@id([roleId, permissionKey])
+  @@map("role_permissions")
+}
+
+// ------------------------------------------------------------
+// REFRESH TOKEN — hashed at rest, one row per issued device session, so
+// "log out this device" / "revoke all sessions" are real, immediate
+// operations rather than "wait for expiry."
+// ------------------------------------------------------------
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  deviceInfo String?
+  ipAddress String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ------------------------------------------------------------
+// AUDIT LOG — who changed what. Every sensitive action (payments, role
+// changes, permission changes — expanded as later modules are built)
+// writes here. actorUserId is nullable to allow system-initiated actions
+// (e.g. an automated expiration sweep) to still log meaningfully.
+// ------------------------------------------------------------
+
+model AuditLog {
+  id             String        @id @default(uuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  actorUserId String?
+  actorUser   User?   @relation(fields: [actorUserId], references: [id])
+
+  action     String // "CREATE" | "UPDATE" | "DELETE"
+  entityName String
+  entityId   String
+  oldValue   Json?
+  newValue   Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([entityName, entityId])
+  @@map("audit_logs")
+}

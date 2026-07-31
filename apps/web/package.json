@@ -1,0 +1,11 @@
+{
+  "name": "@style-le-club/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'Next.js scaffold arrives in Phase 5' && exit 0",
+    "build": "echo 'Next.js scaffold arrives in Phase 5' && exit 0",
+    "lint": "echo 'Next.js scaffold arrives in Phase 5' && exit 0",
+    "typecheck": "echo 'Next.js scaffold arrives in Phase 5' && exit 0"
+  }
+}
