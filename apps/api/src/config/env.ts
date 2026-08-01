@@ -7,6 +7,7 @@ const envSchema = z.object({
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
   PORT: z.coerce.number().int().positive().default(3001),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  CORS_ORIGIN: z.string().url().default('http://localhost:3000'),
 
   // Phase 3 (Auth). No defaults for the secrets — a missing secret should
   // fail loudly at boot, never silently fall back to something guessable.

@@ -1,0 +1,58 @@
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useCurrentUser } from '@/features/auth/use-current-user'
+import { Sidebar } from '@/components/dashboard/sidebar'
+import { Topbar } from '@/components/dashboard/topbar'
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
+  const { data: user, isLoading, isError, error } = useCurrentUser()
+
+  // Duck-typed rather than a strict `instanceof ApiError` check — immune
+  // to any class-identity mismatch across module boundaries (a known sharp
+  // edge with classes extending built-ins under some bundler/transpile
+  // configurations), since all we actually need is "did the server say 401."
+  const status = isError && error && typeof error === 'object' && 'status' in error
+    ? (error as { status: unknown }).status
+    : null
+  const isUnauthenticated = status === 401
+
+  useEffect(() => {
+    if (isUnauthenticated) router.replace('/login')
+  }, [isUnauthenticated, router])
+
+  // Never show a blank screen while we find out — a brief, honest loading
+  // state instead (blueprint section 6: consistent skeletons, no blank
+  // screens on load/error).
+  if (isLoading || isUnauthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-primary" />
+      </div>
+    )
+  }
+
+  if (!user) {
+    // isError but not a 401 — a real failure (network down, API 500), not
+    // an auth problem. Say so plainly rather than redirecting silently.
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <p className="text-sm text-muted-foreground">
+          Impossible de contacter le serveur. Vérifiez votre connexion et réessayez.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex min-h-screen">
+      <Sidebar />
+      <div className="flex flex-1 flex-col">
+        <Topbar />
+        <main className="flex-1 bg-background p-6">{children}</main>
+      </div>
+    </div>
+  )
+}

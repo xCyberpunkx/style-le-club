@@ -9,6 +9,14 @@ async function bootstrap() {
 
   app.use(cookieParser())
 
+  // credentials: true is required for httpOnly cookies to travel cross-origin
+  // (Next.js dev server on :3000, API on :3001) — without it the browser
+  // silently drops the Set-Cookie / Cookie headers entirely.
+  app.enableCors({
+    origin: env.CORS_ORIGIN,
+    credentials: true,
+  })
+
   // Versioned from day one — see blueprint section 5 (API architecture).
   app.setGlobalPrefix('api/v1', { exclude: ['health'] })
 

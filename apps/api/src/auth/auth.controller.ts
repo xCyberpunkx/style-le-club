@@ -1,10 +1,12 @@
-import { Controller, Post, Body, Req, Res, UnauthorizedException } from '@nestjs/common'
+import { Controller, Post, Get, Body, Req, Res, UnauthorizedException } from '@nestjs/common'
 import { Throttle } from '@nestjs/throttler'
 import type { Request, Response } from 'express'
 import { AuthService } from './auth.service'
 import { Public } from '../common/decorators/public.decorator'
+import { CurrentUser } from '../common/decorators/current-user.decorator'
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe'
 import { loginSchema, type LoginInput } from '@style-le-club/shared'
+import type { AuthenticatedUser } from './authenticated-user.interface'
 import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
@@ -89,5 +91,15 @@ export class AuthController {
     }
     this.clearAuthCookies(res)
     return { data: { loggedOut: true } }
+  }
+
+  // Deliberately NOT @Public() — requires a valid access token, same as any
+  // other protected route. This is how the frontend discovers "who is
+  // logged in" and "what can they do," since the JWT itself is httpOnly
+  // and unreadable by client JS.
+  @Get('me')
+  async me(@CurrentUser() user: AuthenticatedUser) {
+    const identity = await this.auth.me(user.sub)
+    return { data: { ...identity, permissions: user.permissions } }
   }
 }

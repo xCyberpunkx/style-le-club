@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Mapped from the brand palette (tailwind.config.ts) into shadcn's
+       semantic HSL-variable convention, so any future shadcn component
+       Zine copies in later phases inherits this theme automatically
+       instead of shipping its own default zinc/slate palette. */
+    --background: 60 20% 96%; /* paper #F6F4EE */
+    --foreground: 200 10% 10%; /* ink #14181B */
+
+    --card: 0 0% 100%;
+    --card-foreground: 200 10% 10%;
+
+    --primary: 152 18% 27%; /* moss #3E5745 */
+    --primary-foreground: 60 20% 96%;
+
+    --secondary: 152 13% 43%; /* moss-light #6D8B77 */
+    --secondary-foreground: 60 20% 96%;
+
+    --muted: 60 10% 91%;
+    --muted-foreground: 200 6% 40%;
+
+    --accent: 33 46% 44%; /* bronze #A8763E */
+    --accent-foreground: 60 20% 96%;
+
+    --destructive: 10 55% 42%; /* clay #B6432E */
+    --destructive-foreground: 60 20% 96%;
+
+    --border: 60 10% 85%;
+    --input: 60 10% 85%;
+    --ring: 33 46% 44%; /* bronze focus ring */
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

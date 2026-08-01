@@ -139,4 +139,31 @@ export class AuthService {
       })
     }
   }
+
+  /**
+   * The access token payload (AuthenticatedUser) deliberately carries only
+   * id/organizationId/employeeId/permissions — no display data, to keep
+   * the JWT small. The frontend still needs a name/email/role label to
+   * render "logged in as," so /auth/me does one light lookup for that.
+   */
+  async me(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { employee: { include: { role: { select: { id: true, name: true } } } } },
+    })
+    if (!user) throw new UnauthorizedException('Invalid or expired session.')
+
+    return {
+      id: user.id,
+      email: user.email,
+      organizationId: user.organizationId,
+      employee: user.employee
+        ? {
+            id: user.employee.id,
+            fullName: user.employee.fullName,
+            role: user.employee.role,
+          }
+        : null,
+    }
+  }
 }
