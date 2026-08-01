@@ -2,13 +2,22 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard } from 'lucide-react'
+import { LayoutDashboard, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { usePermission } from '@/features/auth/use-permission'
 
-const navItems = [{ href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard }]
+const navItems = [
+  { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard, permission: null },
+  { href: '/members', label: 'Membres', icon: Users, permission: 'members.view' },
+] as const
 
 export function Sidebar() {
   const pathname = usePathname()
+  const canViewMembers = usePermission('members.view')
+
+  const visibleNavItems = navItems.filter(
+    (item) => item.permission === null || (item.permission === 'members.view' && canViewMembers),
+  )
 
   return (
     <aside className="hidden w-56 shrink-0 border-r border-border bg-ink text-paper md:flex md:flex-col">
@@ -16,8 +25,8 @@ export function Sidebar() {
         <p className="font-display text-lg font-medium tracking-tight">Style Le Club</p>
       </div>
       <nav className="flex-1 space-y-1 px-3">
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href
+        {visibleNavItems.map(({ href, label, icon: Icon }) => {
+          const active = pathname === href || pathname.startsWith(`${href}/`)
           return (
             <Link
               key={href}

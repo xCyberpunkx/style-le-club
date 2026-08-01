@@ -34,6 +34,8 @@ model Organization {
   employees Employee[]
   roles     Role[]
   auditLogs AuditLog[]
+  members   Member[]
+  counters  Counter[]
 
   @@map("organizations")
 }
@@ -94,6 +96,68 @@ model Employee {
   @@index([organizationId])
   @@index([roleId])
   @@map("employees")
+}
+
+// ------------------------------------------------------------
+// MEMBER — the client (Phase 6). First real business entity; everything
+// downstream (Subscriptions, CheckIns, Appointments, Payments) will
+// reference this. Deliberately scoped to what Phase 6 alone needs —
+// fields the mockups imply but that belong to a later, not-yet-built
+// model are intentionally NOT here (see notes below), following the same
+// discipline already used for permissions (seed.mjs: "not seeding
+// speculative permissions for modules that don't exist yet").
+//
+// Left out on purpose, and why:
+//   - No planId / currentSubscription: that's Subscription (Phase 7). A
+//     Member's "current plan" will be derived by joining the active
+//     Subscription row, not denormalized here — one source of truth for
+//     plan state, no risk of the two drifting apart.
+//   - No status (Active/Expired/Frozen): the context doc's own gap
+//     analysis (section 6, open question) ties this enum to Subscription
+//     lifecycle, which doesn't exist yet. Faking it here now would mean
+//     either duplicating Subscription.status later or a breaking rename.
+//     Phase 6 uses the plain active/deletedAt soft-delete pair instead;
+//     the richer status filter arrives with Phase 7.
+//   - No assignedCoach: gap analysis open question #1 (Coach vs Employee
+//     vs a CoachProfile extension) is explicitly unresolved. Adding a
+//     coachId FK to Employee now would need to be redone once that
+//     decision is made. Deferred to whichever phase resolves it
+//     (Coaches / Phase 10 Appointments).
+//   - age: stores dateOfBirth instead — age computed from a fixed value
+//     silently goes stale; date of birth doesn't.
+// ------------------------------------------------------------
+
+model Member {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  // Human-readable client-facing ID (e.g. "M-000001"), generated once at
+  // creation via CounterService — never user-entered, so it can't collide
+  // or be left blank. See common/counters/counters.service.ts.
+  memberCode String
+
+  fullName    String
+  phone       String
+  email       String?
+  dateOfBirth DateTime?
+  weightKg    Decimal? @db.Decimal(5, 2)
+  heightCm    Decimal? @db.Decimal(5, 2)
+  goal        String?
+
+  joinDate DateTime @default(now())
+
+  active    Boolean   @default(true)
+  deletedAt DateTime? // soft delete — a member's history (past visits,
+  // payments, appointments) must survive them leaving the club.
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, memberCode])
+  @@index([organizationId])
+  @@index([organizationId, phone])
+  @@map("members")
 }
 
 // ------------------------------------------------------------
@@ -193,4 +257,25 @@ model AuditLog {
   @@index([organizationId])
   @@index([entityName, entityId])
   @@map("audit_logs")
+}
+
+// ------------------------------------------------------------
+// COUNTER — generic per-organization atomic sequence generator. First
+// consumer is Member.memberCode; built reusable (name-keyed, not
+// hardcoded to "member") because the same need resurfaces verbatim for
+// invoice/receipt numbering in the Payments phase (blueprint section 4:
+// "atomic receipt numbering"). One mechanism, not one hand-rolled counter
+// per entity that needs a sequential human-readable ID.
+// ------------------------------------------------------------
+
+model Counter {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  name  String // e.g. "member_code", later "invoice_number"
+  value Int    @default(0)
+
+  @@unique([organizationId, name])
+  @@map("counters")
 }

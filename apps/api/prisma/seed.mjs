@@ -18,6 +18,10 @@ const PERMISSIONS = [
   { key: 'roles.manage', description: 'Create, edit, and assign roles' },
   { key: 'permissions.view', description: 'View the permission catalog' },
   { key: 'permissions.manage', description: 'Assign permissions to roles' },
+  { key: 'members.view', description: 'View member profiles' },
+  { key: 'members.create', description: 'Create members' },
+  { key: 'members.update', description: 'Edit members' },
+  { key: 'members.delete', description: 'Deactivate/archive members' },
 ]
 
 const DEFAULT_ADMIN = {
