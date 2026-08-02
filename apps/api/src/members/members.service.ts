@@ -36,6 +36,17 @@ export class MembersService {
   }
 
   /**
+   * Cross-module read used by SubscriptionsService to validate that every
+   * member id in a subscribe/renew request belongs to this organization.
+   * Deliberately exposed here rather than exporting MembersRepository
+   * itself — SubscriptionsModule depends on MembersService's public
+   * surface, not on Members' internal data-access layer.
+   */
+  async findManyByIds(organizationId: string, ids: string[]) {
+    return this.members.findManyByIds(organizationId, ids)
+  }
+
+  /**
    * "M-000001" style, six digits, per-organization sequence. Six digits
    * gives headroom to a million members before it needs re-visiting —
    * comfortably beyond anything a single club will ever reach.

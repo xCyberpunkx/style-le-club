@@ -55,6 +55,17 @@ export class MembersRepository {
     })
   }
 
+  /**
+   * Used by SubscriptionsService to validate that every memberId in a
+   * subscribe/renew request actually belongs to this organization and
+   * hasn't been archived, before any Subscription row is touched.
+   */
+  async findManyByIds(organizationId: string, ids: string[]) {
+    return this.prisma.member.findMany({
+      where: { id: { in: ids }, organizationId, deletedAt: null },
+    })
+  }
+
   async create(organizationId: string, memberCode: string, input: CreateMemberInput) {
     return this.prisma.member.create({
       data: {

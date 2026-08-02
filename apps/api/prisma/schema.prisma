@@ -30,12 +30,14 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users     User[]
-  employees Employee[]
-  roles     Role[]
-  auditLogs AuditLog[]
-  members   Member[]
-  counters  Counter[]
+  users         User[]
+  employees     Employee[]
+  roles         Role[]
+  auditLogs     AuditLog[]
+  members       Member[]
+  counters      Counter[]
+  plans         Plan[]
+  subscriptions Subscription[]
 
   @@map("organizations")
 }
@@ -100,29 +102,23 @@ model Employee {
 
 // ------------------------------------------------------------
 // MEMBER — the client (Phase 6). First real business entity; everything
-// downstream (Subscriptions, CheckIns, Appointments, Payments) will
-// reference this. Deliberately scoped to what Phase 6 alone needs —
-// fields the mockups imply but that belong to a later, not-yet-built
-// model are intentionally NOT here (see notes below), following the same
-// discipline already used for permissions (seed.mjs: "not seeding
-// speculative permissions for modules that don't exist yet").
+// downstream (Subscriptions, CheckIns, Appointments, Payments) references
+// this. Scoped to what Phase 6 alone needed at the time — some of the
+// notes below are now historical (Plan/Subscription exist as of Phase 7)
+// but kept for the record of why they weren't added directly to Member:
 //
-// Left out on purpose, and why:
-//   - No planId / currentSubscription: that's Subscription (Phase 7). A
-//     Member's "current plan" will be derived by joining the active
-//     Subscription row, not denormalized here — one source of truth for
-//     plan state, no risk of the two drifting apart.
-//   - No status (Active/Expired/Frozen): the context doc's own gap
-//     analysis (section 6, open question) ties this enum to Subscription
-//     lifecycle, which doesn't exist yet. Faking it here now would mean
-//     either duplicating Subscription.status later or a breaking rename.
-//     Phase 6 uses the plain active/deletedAt soft-delete pair instead;
-//     the richer status filter arrives with Phase 7.
+//   - No planId / currentSubscription on Member itself: a Member's
+//     "current plan" is derived by joining the active SubscriptionMember
+//     row, not denormalized here — one source of truth for plan state.
+//     See Subscription below for the actual relationship.
+//   - No status (Active/Expired/Frozen) on Member itself: that status
+//     belongs to Subscription (a member's *membership* can be
+//     active/expired/frozen; the member record itself is simply
+//     active/archived via the soft-delete pair below). Computing a
+//     member's display status means checking their current Subscription.
 //   - No assignedCoach: gap analysis open question #1 (Coach vs Employee
-//     vs a CoachProfile extension) is explicitly unresolved. Adding a
-//     coachId FK to Employee now would need to be redone once that
-//     decision is made. Deferred to whichever phase resolves it
-//     (Coaches / Phase 10 Appointments).
+//     vs a CoachProfile extension) is still unresolved. Deferred to
+//     whichever phase resolves it (Coaches / Phase 10 Appointments).
 //   - age: stores dateOfBirth instead — age computed from a fixed value
 //     silently goes stale; date of birth doesn't.
 // ------------------------------------------------------------
@@ -151,6 +147,8 @@ model Member {
   deletedAt DateTime? // soft delete — a member's history (past visits,
   // payments, appointments) must survive them leaving the club.
 
+  subscriptionMemberships SubscriptionMember[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -158,6 +156,132 @@ model Member {
   @@index([organizationId])
   @@index([organizationId, phone])
   @@map("members")
+}
+
+// ------------------------------------------------------------
+// PLAN — the catalog (Phase 7). What a club sells: a name, a duration, a
+// price, whether it can cover more than one linked member (a "couple"
+// style plan). Soft-deleted like Member — a plan that's retired must
+// still be resolvable for every past Subscription that referenced it.
+// ------------------------------------------------------------
+
+model Plan {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  name        String
+  description String?
+  durationDays Int // e.g. 30, 90, 365 — kept as days, not a month/year enum,
+  // so a club can sell a 45-day promo plan without a schema change.
+  price Decimal @db.Decimal(10, 2)
+
+  // Resolves the gap analysis's open "couple plan" question: one Plan can
+  // allow a Subscription bought against it to cover more than one Member
+  // (see SubscriptionMember below), rather than requiring two separate
+  // Subscription rows kept in sync by hand.
+  allowsLinkedMembers Boolean @default(false)
+  maxLinkedMembers    Int     @default(1)
+
+  isPopular Boolean @default(false) // mockup's "Popular" badge
+
+  active    Boolean   @default(true)
+  deletedAt DateTime?
+
+  subscriptions Subscription[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("plans")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  FROZEN
+  CANCELLED
+}
+
+// ------------------------------------------------------------
+// SUBSCRIPTION — a specific enrollment in a Plan (Phase 7). One
+// Subscription can cover more than one Member via SubscriptionMember
+// (the couple-plan case) — status, dates, and freeze state are shared
+// by every linked member rather than duplicated per person.
+//
+// priceAtPurchase is a frozen snapshot (blueprint section 4: "price/rate
+// snapshots are frozen at transaction time so a later price change never
+// retroactively rewrites history") — Plan.price can change without
+// altering what a past Subscription actually cost.
+//
+// ASSUMPTION FLAGGED FOR CONFIRMATION: a member may hold at most one
+// ACTIVE or FROZEN subscription at a time — enforced in the service
+// layer (subscriptions.service.ts), not the DB, since the check spans
+// the SubscriptionMember join. The blueprint asks to confirm this
+// against the original desktop build's overlap logic, which wasn't
+// available to reference here; if the legacy behavior differs (e.g. a
+// renewal queued to start when the current one ends), this needs
+// revisiting.
+// ------------------------------------------------------------
+
+model Subscription {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  planId String
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  status SubscriptionStatus @default(ACTIVE)
+
+  startDate DateTime @default(now())
+  endDate   DateTime
+
+  priceAtPurchase Decimal @db.Decimal(10, 2)
+
+  // Freeze tracking kept deliberately minimal for Phase 7: the mockup's
+  // Freeze action needs a timestamp and the ability to Unfreeze, not a
+  // full freeze-day-banking ledger (extending endDate by days frozen).
+  // If the club needs "freeze time gets added back to your expiry," that
+  // banking logic is a Phase 7 follow-up, not a schema change — it reads
+  // frozenAt against the unfreeze time and shifts endDate accordingly.
+  frozenAt DateTime?
+
+  cancelledAt DateTime?
+
+  members SubscriptionMember[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([planId])
+  @@map("subscriptions")
+}
+
+// Join table resolving Subscription <-> Member as many-to-many, so a
+// couple plan's two people share one Subscription (one price, one
+// expiry, one freeze) instead of needing two rows kept in sync.
+// isPrimary marks who's billed/contacted as the account holder.
+model SubscriptionMember {
+  id String @id @default(uuid())
+
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  memberId String
+  member   Member @relation(fields: [memberId], references: [id])
+
+  isPrimary Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@unique([subscriptionId, memberId])
+  @@index([memberId])
+  @@map("subscription_members")
 }
 
 // ------------------------------------------------------------

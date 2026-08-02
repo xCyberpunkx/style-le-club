@@ -22,6 +22,14 @@ const PERMISSIONS = [
   { key: 'members.create', description: 'Create members' },
   { key: 'members.update', description: 'Edit members' },
   { key: 'members.delete', description: 'Deactivate/archive members' },
+  { key: 'plans.view', description: 'View membership plans' },
+  { key: 'plans.create', description: 'Create membership plans' },
+  { key: 'plans.update', description: 'Edit membership plans' },
+  { key: 'plans.delete', description: 'Archive membership plans' },
+  { key: 'subscriptions.view', description: 'View member subscriptions' },
+  { key: 'subscriptions.create', description: 'Subscribe/renew/upgrade a member' },
+  { key: 'subscriptions.update', description: 'Freeze/unfreeze a subscription' },
+  { key: 'subscriptions.delete', description: 'Cancel a subscription' },
 ]
 
 const DEFAULT_ADMIN = {

@@ -12,6 +12,7 @@ import { useUpdateMember } from '@/features/members/use-update-member'
 import { useDeleteMember } from '@/features/members/use-delete-member'
 import { memberFormSchema, type MemberFormValues } from '@/features/members/member-form-schema'
 import { MemberFormFields } from '@/features/members/member-form-fields'
+import { SubscriptionPanel } from '@/features/subscriptions/subscription-panel'
 import { Can } from '@/features/auth/can'
 import { ApiError } from '@/lib/api-error'
 import { Button } from '@/components/ui/button'
@@ -158,6 +159,8 @@ export default function EditMemberPage() {
           </Can>
         </div>
       </form>
+
+      <SubscriptionPanel memberId={member.id} />
     </div>
   )
 }

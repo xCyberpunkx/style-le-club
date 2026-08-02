@@ -10,6 +10,8 @@ import { EmployeesModule } from './employees/employees.module'
 import { RolesModule } from './roles/roles.module'
 import { PermissionsModule } from './permissions/permissions.module'
 import { MembersModule } from './members/members.module'
+import { PlansModule } from './plans/plans.module'
+import { SubscriptionsModule } from './subscriptions/subscriptions.module'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
 import { PermissionsGuard } from './common/guards/permissions.guard'
 import { HttpExceptionFilter } from './common/filters/http-exception.filter'
@@ -26,6 +28,8 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter'
     RolesModule,
     PermissionsModule,
     MembersModule,
+    PlansModule,
+    SubscriptionsModule,
   ],
   providers: [
     // Order matters: rate-limit first, then authenticate, then authorize.
