@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, ClipboardList } from 'lucide-react'
+import { LayoutDashboard, Users, ClipboardList, Wallet, DoorOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePermission } from '@/features/auth/use-permission'
 
@@ -10,17 +10,23 @@ const navItems = [
   { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard, permission: null },
   { href: '/members', label: 'Membres', icon: Users, permission: 'members.view' },
   { href: '/plans', label: 'Plans', icon: ClipboardList, permission: 'plans.view' },
+  { href: '/payments', label: 'Paiements', icon: Wallet, permission: 'payments.view' },
+  { href: '/attendance', label: 'Présences', icon: DoorOpen, permission: 'attendance.view' },
 ] as const
 
 export function Sidebar() {
   const pathname = usePathname()
   const canViewMembers = usePermission('members.view')
   const canViewPlans = usePermission('plans.view')
+  const canViewPayments = usePermission('payments.view')
+  const canViewAttendance = usePermission('attendance.view')
 
   const visibleNavItems = navItems.filter((item) => {
     if (item.permission === null) return true
     if (item.permission === 'members.view') return canViewMembers
     if (item.permission === 'plans.view') return canViewPlans
+    if (item.permission === 'payments.view') return canViewPayments
+    if (item.permission === 'attendance.view') return canViewAttendance
     return false
   })
 

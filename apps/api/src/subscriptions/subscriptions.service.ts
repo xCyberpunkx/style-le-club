@@ -8,7 +8,11 @@ import { buildPaginationMeta, paginationSkipTake } from '../common/pagination/pa
 import { AuditLogService } from '../audit/audit-log.service'
 import { PlansService } from '../plans/plans.service'
 import { MembersService } from '../members/members.service'
-import { SubscriptionsRepository, type SubscriptionWithRelations } from './subscriptions.repository'
+import {
+  SubscriptionsRepository,
+  type SubscriptionWithRelations,
+  type SubscriptionStatusValue,
+} from './subscriptions.repository'
 
 interface ActorContext {
   organizationId: string
@@ -41,6 +45,23 @@ export class SubscriptionsService {
     const subscription = await this.subscriptions.findById(organizationId, id)
     if (!subscription) throw new NotFoundException('Subscription not found.')
     return subscription
+  }
+
+  /**
+   * Added for Attendance (Phase 9): "can this member check in?" needs to
+   * know their current subscription status without Attendance reaching
+   * into SubscriptionsRepository directly — SubscriptionsModule only
+   * exports SubscriptionsService, by design (see subscriptions.module.ts).
+   * Reuses the same overlap-lookup query the create()/renew() flows
+   * already rely on rather than adding a new repository method.
+   */
+  async getCurrentStatusForMember(
+    organizationId: string,
+    memberId: string,
+  ): Promise<SubscriptionStatusValue | null> {
+    const active = await this.subscriptions.findActiveOrFrozenForMembers(organizationId, [memberId])
+    const [first] = active
+    return first ? first.subscription.status : null
   }
 
   /**

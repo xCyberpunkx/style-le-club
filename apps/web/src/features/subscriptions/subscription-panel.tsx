@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useMemberSubscriptions } from './use-member-subscriptions'
 import { useCreateSubscription } from './use-create-subscription'
 import {
@@ -96,6 +97,13 @@ export function SubscriptionPanel({ memberId }: { memberId: string }) {
               <Can permission="subscriptions.update">
                 {(sub.status === 'ACTIVE' || sub.status === 'FROZEN') && (
                   <div className="mt-3 flex flex-wrap gap-2">
+                    <Can permission="payments.create">
+                      <Link href={`/payments/new?memberId=${memberId}&subscriptionId=${sub.id}`}>
+                        <Button type="button" variant="outline" size="sm">
+                          Enregistrer un paiement
+                        </Button>
+                      </Link>
+                    </Can>
                     {sub.status === 'ACTIVE' && (
                       <Button
                         type="button"

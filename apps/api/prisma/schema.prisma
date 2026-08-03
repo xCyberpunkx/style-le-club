@@ -38,6 +38,8 @@ model Organization {
   counters      Counter[]
   plans         Plan[]
   subscriptions Subscription[]
+  payments      Payment[]
+  attendanceRecords AttendanceRecord[]
 
   @@map("organizations")
 }
@@ -148,6 +150,8 @@ model Member {
   // payments, appointments) must survive them leaving the club.
 
   subscriptionMemberships SubscriptionMember[]
+  payments                Payment[]
+  attendanceRecords       AttendanceRecord[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -251,7 +255,8 @@ model Subscription {
 
   cancelledAt DateTime?
 
-  members SubscriptionMember[]
+  members  SubscriptionMember[]
+  payments Payment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -397,9 +402,166 @@ model Counter {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
 
-  name  String // e.g. "member_code", later "invoice_number"
+  name  String // e.g. "member_code", "receipt_number"
   value Int    @default(0)
 
   @@unique([organizationId, name])
   @@map("counters")
+}
+
+// ------------------------------------------------------------
+// PAYMENT — Phase 8. Records money actually received.
+//
+// "Exactly one source" rule (blueprint section 4 / context doc gap #4):
+// the architecture doc requires every Payment to link to exactly one of
+// Subscription, Appointment, or Sale. Appointment and Sale don't exist in
+// the schema yet (Phases 10/11) — per the blueprint's own schema-evolution
+// rule ("no speculative fields for modules three phases away"), this does
+// NOT pre-add appointmentId/saleId columns pointing at nothing. Today,
+// subscriptionId is simply a required FK, since Subscription is the only
+// real source. When Appointment/Sale land: subscriptionId becomes
+// nullable, appointmentId/saleId are added the same way, and a DB CHECK
+// constraint (exactly one of the three non-null) gets added in that
+// migration — flagged here so a future session doesn't have to
+// rediscover the plan from scratch.
+//
+// memberId is stored directly (not derived by joining through
+// Subscription -> SubscriptionMember) because a couple-plan Subscription
+// can have two linked members, and a payment needs one unambiguous payer
+// for reporting/receipts. Service layer validates memberId is actually
+// one of the target Subscription's linked members.
+//
+// amount is a frozen snapshot, independent of Subscription.priceAtPurchase
+// or Plan.price (blueprint section 4: "price/rate snapshots frozen at
+// transaction time") — a discount, partial payment, or later price change
+// must never retroactively alter what this row says was actually paid.
+//
+// onDelete: Restrict on both memberId and subscriptionId — a member or
+// subscription with payment history can never be hard-deleted out from
+// under it. In practice neither Member nor Subscription expose a hard-
+// delete path today (soft delete / status transitions only), so this is
+// defense-in-depth, not the only thing standing between the data and loss.
+//
+// No update/delete endpoint is exposed for Payment at all — a recorded
+// payment is immutable. The only state transition is create -> refund()
+// (status -> REFUNDED), mirroring "archive, don't erase" for financial
+// records specifically: even a refund keeps the original row intact
+// rather than deleting it.
+// ------------------------------------------------------------
+
+enum PaymentMethod {
+  CASH
+  CARD
+  MIXED
+}
+
+enum PaymentStatus {
+  PAID
+  PENDING
+  REFUNDED
+}
+
+model Payment {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  // Client-facing sequential number (e.g. "R-000001"), generated via
+  // CountersService inside the same $transaction as this row's INSERT —
+  // see payments.repository.ts. Never user-entered.
+  receiptNumber String
+
+  memberId String
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+
+  amount Decimal @db.Decimal(10, 2)
+
+  method PaymentMethod
+  splits PaymentSplit[] // populated only when method = MIXED
+
+  status     PaymentStatus @default(PAID)
+  paidAt     DateTime      @default(now())
+  refundedAt DateTime?
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, receiptNumber])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([memberId])
+  @@index([subscriptionId])
+  @@map("payments")
+}
+
+// A tender-type breakdown, one row per method actually used, only when
+// the parent Payment.method is MIXED. A single enum column on Payment
+// (blueprint context doc's open question) can't represent "part cash,
+// part card" — this line-item table can, and extends cleanly to a third
+// tender type later (e.g. mobile pay) without another schema migration
+// touching Payment itself.
+enum PaymentSplitMethod {
+  CASH
+  CARD
+}
+
+model PaymentSplit {
+  id String @id @default(uuid())
+
+  paymentId String
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  method PaymentSplitMethod
+  amount Decimal            @db.Decimal(10, 2)
+
+  @@index([paymentId])
+  @@map("payment_splits")
+}
+
+// ------------------------------------------------------------
+// ATTENDANCE — Phase 9. Manual check-in today; the hardware
+// integration point is the AccessControlAdapter interface
+// (apps/api/src/attendance/access-control/), NOT this table. Per
+// blueprint section 5 ("the hardware access-control adapter lives
+// inside the Attendance module"), a future real RFID/turnstile adapter
+// swaps in behind that interface without touching this schema or
+// AttendanceService's business rules (active-subscription check,
+// no-double-check-in) at all.
+//
+// `method` only has MANUAL today — deliberately not pre-populating
+// RFID/QR ahead of the hardware that would produce them (same
+// "no speculative fields" rule as Payment's Appointment/Sale gap).
+// Adding an enum value later is a one-line, additive migration, unlike
+// a speculative column or table would have been.
+// ------------------------------------------------------------
+
+enum AttendanceMethod {
+  MANUAL
+}
+
+model AttendanceRecord {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  memberId String
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  method AttendanceMethod @default(MANUAL)
+
+  checkInAt  DateTime  @default(now())
+  checkOutAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([organizationId, memberId])
+  // Backs "does this member currently have an open (checkOutAt IS NULL)
+  // check-in" — the exact lookup checkIn()/checkOut() both do first.
+  @@index([memberId, checkOutAt])
+  @@map("attendance_records")
 }

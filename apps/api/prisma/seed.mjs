@@ -30,6 +30,20 @@ const PERMISSIONS = [
   { key: 'subscriptions.create', description: 'Subscribe/renew/upgrade a member' },
   { key: 'subscriptions.update', description: 'Freeze/unfreeze a subscription' },
   { key: 'subscriptions.delete', description: 'Cancel a subscription' },
+  // Payments has no update/delete key — a recorded payment is immutable
+  // and there's no route to edit or hard-delete one (see the Payment
+  // model comment in schema.prisma). "refund" replaces them as the one
+  // real state transition a Payment can undergo after creation.
+  { key: 'payments.view', description: 'View payments' },
+  { key: 'payments.create', description: 'Record a payment' },
+  { key: 'payments.refund', description: 'Refund a payment' },
+  // Attendance also skips the view/create/update/delete template —
+  // check-in and check-out are two halves of the same routine front-desk
+  // action, performed by the same role, so one "manage" key covers both
+  // rather than splitting hairs between create/update for a table with
+  // no meaningful update outside that lifecycle.
+  { key: 'attendance.view', description: 'View attendance records' },
+  { key: 'attendance.manage', description: 'Check members in and out' },
 ]
 
 const DEFAULT_ADMIN = {
